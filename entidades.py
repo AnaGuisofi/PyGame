@@ -165,7 +165,7 @@ class TextoFlutuante:
 
     @property
     def vivo(self):
-        """Retorna True enquanto o texto estiver visível."""
+        """Permite consultar texto.vivo, sem parênteses, verificando se ainda há tempo de vida."""
         return self.vida > 0
 
     def desenhar(self, tela, fonte):
