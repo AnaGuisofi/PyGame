@@ -175,3 +175,334 @@ class TextoFlutuante:
         pos = (int(self.x - surf.get_width() / 2), int(self.y))
         tela.blit(sombra, (pos[0] + 2, pos[1] + 2))
         tela.blit(surf, pos)
+
+class Raquete:
+    """Plataforma controlada pelo jogador com suporte a buffs, debuffs e choque."""
+
+    def __init__(self, largura_base=RAQUETE_LARGURA_PADRAO):
+        """Posiciona a raquete no centro inferior da arena."""
+        self.largura_base = largura_base
+        self.largura = largura_base
+        self.altura = RAQUETE_ALTURA
+
+        # Cria a parte retangular da raquete e centraliza ela perto da parte inferior
+        self.rect = pygame.Rect(
+            (LARGURA_TELA - self.largura) // 2,
+            ALTURA_TELA - RAQUETE_MARGEM_INFERIOR,
+            self.largura,
+            self.altura,
+        )
+
+        # Quanto tempo cada efeito fica ativo
+        self.tempo_animacao = 0.0
+        self.tempo_expandida = 0.0
+        self.tempo_encolhida = 0.0
+        self.tempo_invertida = 0.0
+        self.tempo_choque = 0.0
+        self.tempo_laser = 0.0
+        self.recarga_laser = 0.0
+
+    def resetar(self, largura_base=None):
+        """Restaura tamanho base e desativa todos os modificadores temporários."""
+        if largura_base is not None:
+            self.largura_base = largura_base
+        self.tempo_expandida = 0.0
+        self.tempo_encolhida = 0.0
+        self.tempo_invertida = 0.0
+        self.tempo_choque = 0.0
+        self.tempo_laser = 0.0
+        self._recalcular_largura()
+        self.rect.centerx = LARGURA_TELA // 2
+
+    def _recalcular_largura(self):
+        """Define a largura atual com base nos efeitos ativos."""
+        if self.tempo_encolhida > 0:
+            nova = RAQUETE_LARGURA_ENCOLHIDA
+        elif self.tempo_expandida > 0:
+            nova = RAQUETE_LARGURA_EXPANDIDA
+        else:
+            nova = self.largura_base
+
+        # Guarda o centro para a raquete não pular de posição ao mudar de tamanho
+        centro_x = self.rect.centerx
+        self.largura = nova
+        self.rect.width = nova
+        self.rect.centerx = centro_x
+        self._limitar_bordas()
+    def _limitar_bordas(self):
+        """Impede que a raquete ultrapasse as paredes laterais da arena."""
+        if self.rect.left < 14:
+            self.rect.left = 14
+        elif self.rect.right > LARGURA_TELA - 14:
+            self.rect.right = LARGURA_TELA - 14
+
+    def ativar_expansao(self, duracao):
+        """Expande a raquete e cancela o efeito de encolhimento."""
+        self.tempo_encolhida = 0.0
+        self.tempo_expandida = duracao
+        self._recalcular_largura()
+
+    def ativar_encolhimento(self, duracao):
+        """Encolhe a raquete e cancela expansão ativa."""
+        self.tempo_expandida = 0.0
+        self.tempo_encolhida = duracao
+        self._recalcular_largura()
+
+    def ativar_inversao(self, duracao):
+        """Inverte os controles horizontais do jogador temporariamente."""
+        self.tempo_invertida = duracao
+
+    def ativar_laser(self, duracao):
+        """Habilita os canhões laser nas extremidades da raquete."""
+        self.tempo_laser = duracao
+
+    def aplicar_choque_chefao(self):
+        """Aplica curto-circuito ao ser atingido por disparo do chefão."""
+        self.tempo_expandida = 0.0
+        self.tempo_laser = 0.0
+        self.tempo_encolhida = 4.5
+        self.tempo_choque = 0.55
+        self._recalcular_largura()
+    def mover_teclado(self, direcao, dt):
+        """Desloca a raquete via teclado respeitando inversão e paralisia."""
+        if self.tempo_choque > 0:
+            return
+        fator_inv = -1 if self.tempo_invertida > 0 else 1
+        self.rect.x += int(direcao * fator_inv * RAQUETE_VELOCIDADE * dt)
+        self._limitar_bordas()
+
+    def mover_mouse(self, pos_x):
+        """Alinha a raquete ao cursor do mouse (espelhado se invertido)."""
+        if self.tempo_choque > 0:
+            return
+        alvo_x = (LARGURA_TELA - pos_x) if self.tempo_invertida > 0 else pos_x
+        self.rect.centerx = alvo_x
+        self._limitar_bordas()
+
+    def atualizar(self, dt):
+        """Atualiza timers de efeitos e animação dos propulsores."""
+        self.tempo_animacao += dt
+        if self.recarga_laser > 0:
+            self.recarga_laser -= dt
+        if self.tempo_choque > 0:
+            self.tempo_choque = max(0.0, self.tempo_choque - dt)
+        if self.tempo_invertida > 0:
+            self.tempo_invertida = max(0.0, self.tempo_invertida - dt)
+
+        precisa_recalcular = False
+        if self.tempo_expandida > 0:
+            self.tempo_expandida -= dt
+            if self.tempo_expandida <= 0:
+                precisa_recalcular = True
+
+        if self.tempo_encolhida > 0:
+            self.tempo_encolhida -= dt
+            if self.tempo_encolhida <= 0:
+                precisa_recalcular = True
+
+        if precisa_recalcular:
+            self._recalcular_largura()
+
+        if self.tempo_laser > 0:
+            self.tempo_laser -= dt
+
+    def desenhar(self, tela):
+        """Desenha a raquete com feedback visual para buffs, armadilhas e choque."""
+        cor_principal = COR_DESTAQUE_CIANO
+        if self.tempo_choque > 0:
+            cor_principal = (255, 255, 255) if int(self.tempo_animacao * 30) % 2 == 0 else COR_PERIGO_VERMELHO
+        elif self.tempo_invertida > 0:
+            cor_principal = COR_PERIGO_ROXO
+        elif self.tempo_encolhida > 0:
+            cor_principal = COR_PERIGO_VERMELHO
+        elif self.tempo_laser > 0:
+            cor_principal = COR_DESTAQUE_LARANJA
+        elif self.tempo_expandida > 0:
+            cor_principal = COR_DESTAQUE_MAGENTA
+
+        pulso = int(4 + 3 * math.sin(self.tempo_animacao * 28))
+        pygame.draw.polygon(
+            tela,
+            COR_DESTAQUE_AMARELO,
+            [
+                (self.rect.left + 10, self.rect.bottom),
+                (self.rect.left + 20, self.rect.bottom),
+                (self.rect.left + 15, self.rect.bottom + pulso),
+            ],
+        )
+        pygame.draw.polygon(
+            tela,
+            COR_DESTAQUE_AMARELO,
+            [
+                (self.rect.right - 20, self.rect.bottom),
+                (self.rect.right - 10, self.rect.bottom),
+                (self.rect.right - 15, self.rect.bottom + pulso),
+            ],
+        )
+
+        pygame.draw.rect(tela, cor_principal, self.rect, border_radius=8)
+        nucleo = self.rect.inflate(-14, -8)
+        if nucleo.width > 4:
+            pygame.draw.rect(tela, (240, 250, 255), nucleo, border_radius=5)
+
+        if self.tempo_laser > 0:
+            canhao_esq = pygame.Rect(self.rect.left + 4, self.rect.top - 8, 6, 10)
+            canhao_dir = pygame.Rect(self.rect.right - 10, self.rect.top - 8, 6, 10)
+            pygame.draw.rect(tela, COR_DESTAQUE_AMARELO, canhao_esq, border_radius=2)
+            pygame.draw.rect(tela, COR_DESTAQUE_AMARELO, canhao_dir, border_radius=2)
+
+class Bola:
+    """Esfera de energia com rastro animado e proteção contra ângulos rasos."""
+
+    def __init__(self, x, y, presa=True, velocidade=BOLA_VELOCIDADE_INICIAL):
+        """Inicializa a bola sobre a raquete ou em movimento livre."""
+        self.x = float(x)
+        self.y = float(y)
+        self.raio = BOLA_RAIO
+        self.velocidade = velocidade
+        self.vx = 0.0
+        self.vy = 0.0
+        self.presa = presa
+        self.tempo_fogo = 0.0
+        self.rastro = []
+        self.rect = pygame.Rect(
+            int(x - self.raio), int(y - self.raio), self.raio * 2, self.raio * 2
+        )
+
+    def lancar(self, angulo_graus=None):
+        """Dispara a bola para cima em um ângulo controlado."""
+        if angulo_graus is None:
+            angulo_graus = random.uniform(-34, 34)
+        rad = math.radians(angulo_graus)
+        self.vx = self.velocidade * math.sin(rad)
+        self.vy = -abs(self.velocidade * math.cos(rad))
+        self.presa = False
+
+    def aplicar_turbo(self):
+        """Aumenta bruscamente a velocidade da bola (efeito de armadilha)."""
+        self.velocidade = min(self.velocidade * 1.28, BOLA_VELOCIDADE_MAXIMA)
+        self.normalizar_velocidade()
+
+    def normalizar_velocidade(self):
+        """Garante módulo constante da velocidade e evita trajetória quase horizontal."""
+        mag = math.hypot(self.vx, self.vy)
+        if mag == 0:
+            return
+        self.vx = (self.vx / mag) * self.velocidade
+        self.vy = (self.vy / mag) * self.velocidade
+
+        min_vy = self.velocidade * 0.28
+        if abs(self.vy) < min_vy:
+            sinal_y = -1.0 if self.vy <= 0 else 1.0
+            sinal_x = -1.0 if self.vx < 0 else 1.0
+            self.vy = sinal_y * min_vy
+            self.vx = sinal_x * math.sqrt(max(1.0, self.velocidade**2 - self.vy**2))
+
+    def atualizar(self, dt, raquete):
+        """Atualiza posição e rastro luminoso da bola."""
+        if self.tempo_fogo > 0:
+            self.tempo_fogo -= dt
+
+        if self.presa:
+            self.x = float(raquete.rect.centerx)
+            self.y = float(raquete.rect.top - self.raio - 2)
+            self.rastro.clear()
+        else:
+            self.rastro.append((self.x, self.y))
+            if len(self.rastro) > BOLA_TAMANHO_RASTRO:
+                self.rastro.pop(0)
+
+            self.x += self.vx * dt
+            self.y += self.vy * dt
+
+        self.rect.center = (int(self.x), int(self.y))
+
+    def desenhar(self, tela):
+        """Desenha o rastro de energia e o núcleo brilhante da bola."""
+        em_fogo = self.tempo_fogo > 0
+        cor_rastro = COR_DESTAQUE_LARANJA if em_fogo else COR_DESTAQUE_CIANO
+        cor_nucleo = COR_DESTAQUE_AMARELO if em_fogo else (255, 255, 255)
+
+        total = len(self.rastro)
+        for idx, (rx, ry) in enumerate(self.rastro):
+            fator = (idx + 1) / max(1, total)
+            raio_rastro = max(2, int(self.raio * fator * 0.85))
+            cor_interp = (
+                int(cor_rastro[0] * fator),
+                int(cor_rastro[1] * fator),
+                int(cor_rastro[2] * fator),
+            )
+            pygame.draw.circle(tela, cor_interp, (int(rx), int(ry)), raio_rastro)
+
+        centro = (int(self.x), int(self.y))
+        pygame.draw.circle(tela, cor_rastro, centro, self.raio + 2)
+        pygame.draw.circle(tela, cor_nucleo, centro, self.raio - 2)
+
+class Tijolo:
+    """Bloco da arena com suporte a múltiplos hits, indestrutibilidade e movimento."""
+
+    def __init__(self, x, y, largura, altura, tipo, vx=0.0):
+        """Configura resistência, pontuação, velocidade horizontal e aparência."""
+        self.x = float(x)
+        self.y = float(y)
+        self.rect = pygame.Rect(x, y, largura, altura)
+        self.tipo = tipo
+        resistencia, pontos, cor, cor_borda = TIPOS_TIJOLO[tipo]
+        self.destrutivel = resistencia > 0
+        self.vida_max = resistencia
+        self.vida = resistencia
+        self.pontos = pontos
+        self.cor = cor
+        self.cor_borda = cor_borda
+        self.vx = float(vx)
+        self.flash_impacto = 0.0
+
+    def atingir(self, dano=1):
+        """
+        Aplica dano ao tijolo.
+
+        Returns:
+            bool: True se o tijolo foi destruído neste impacto.
+        """
+        self.flash_impacto = 0.12
+        if not self.destrutivel:
+            return False
+        self.vida -= dano
+        return self.vida <= 0
+
+    def atualizar(self, dt):
+        """Atualiza brilho de impacto e deslocamento horizontal."""
+        if self.flash_impacto > 0:
+            self.flash_impacto = max(0.0, self.flash_impacto - dt)
+        if self.vx != 0.0:
+            self.x += self.vx * dt
+            self.rect.x = int(self.x)
+
+    def desenhar(self, tela):
+        """Renderiza o tijolo com relevo, ícone especial e rachaduras."""
+        cor_atual = (255, 255, 255) if self.flash_impacto > 0 else self.cor
+        pygame.draw.rect(tela, cor_atual, self.rect, border_radius=5)
+        pygame.draw.rect(tela, self.cor_borda, self.rect, 2, border_radius=5)
+
+        if self.tipo == 7:
+            pygame.draw.line(
+                tela, self.cor_borda, (self.rect.left + 8, self.rect.top + 6),
+                (self.rect.right - 8, self.rect.bottom - 6), 2
+            )
+            pygame.draw.line(
+                tela, self.cor_borda, (self.rect.right - 8, self.rect.top + 6),
+                (self.rect.left + 8, self.rect.bottom - 6), 2
+            )
+            return
+
+        reflexo = pygame.Rect(self.rect.x + 5, self.rect.y + 4, self.rect.width - 10, 4)
+        pygame.draw.rect(tela, self.cor_borda, reflexo, border_radius=2)
+
+        if self.tipo == 6:
+            cx, cy = self.rect.center
+            pygame.draw.circle(tela, COR_DESTAQUE_AMARELO, (cx, cy), 5)
+
+        if self.destrutivel and self.vida < self.vida_max:
+            cx, cy = self.rect.center
+            pygame.draw.line(tela, (20, 20, 35), (cx - 12, self.rect.top + 3), (cx - 2, cy), 2)
+            pygame.draw.line(tela, (20, 20, 35), (cx - 2, cy), (cx + 10, self.rect.bottom - 3), 2)
