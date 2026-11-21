@@ -506,3 +506,210 @@ class Tijolo:
             cx, cy = self.rect.center
             pygame.draw.line(tela, (20, 20, 35), (cx - 12, self.rect.top + 3), (cx - 2, cy), 2)
             pygame.draw.line(tela, (20, 20, 35), (cx - 2, cy), (cx + 10, self.rect.bottom - 3), 2)
+            
+class Capsula:
+    """Cápsula que cai dos tijolos, podendo ser Power-up positivo ou Armadilha."""
+
+    def __init__(self, x, y, tipo, eh_armadilha=False):
+        """Inicializa a cápsula com visual diferenciado para bônus ou perigo."""
+        self.tipo = tipo
+        self.eh_armadilha = eh_armadilha
+        tabela = TIPOS_ARMADILHA if eh_armadilha else TIPOS_POWERUP
+        self.sigla, self.cor = tabela[tipo]
+        self.rect = pygame.Rect(int(x - 25), int(y - 12), 50, 24)
+        self.tempo = 0.0
+
+    def atualizar(self, dt):
+        """Move a cápsula para baixo e atualiza sua animação pulsante."""
+        self.rect.y += int(CAPSULA_VELOCIDADE_QUEDA * dt)
+        self.tempo += dt
+
+    def desenhar(self, tela, fonte):
+        """Desenha cápsula arredondada (bônus) ou angular de alerta (armadilha)."""
+        escala = int(2 * math.sin(self.tempo * 12))
+        rect_anim = self.rect.inflate(escala, escala)
+        fundo = (48, 12, 24) if self.eh_armadilha else (18, 26, 52)
+        raio_borda = 3 if self.eh_armadilha else 11
+
+        pygame.draw.rect(tela, fundo, rect_anim, border_radius=raio_borda)
+        pygame.draw.rect(tela, self.cor, rect_anim, 2, border_radius=raio_borda)
+
+        label = fonte.render(self.sigla, True, self.cor)
+        tela.blit(label, label.get_rect(center=rect_anim.center))
+
+
+class ProjetilLaser:
+    """Disparo vertical emitido pela raquete quando o power-up Laser está ativo."""
+
+    def __init__(self, x, y):
+        """Cria um feixe de laser na posição do canhão."""
+        self.rect = pygame.Rect(int(x - 2), int(y - 14), 4, 16)
+        self.velocidade = 800.0
+
+    def atualizar(self, dt):
+        """Desloca o laser verticalmente para o topo da tela."""
+        self.rect.y -= int(self.velocidade * dt)
+
+    def desenhar(self, tela):
+        """Renderiza o feixe energético."""
+        pygame.draw.rect(tela, COR_DESTAQUE_AMARELO, self.rect, border_radius=2)
+
+
+class ProjetilInimigo:
+    """Rajada de plasma disparada pelo chefão contra a raquete do jogador."""
+
+    def __init__(self, x, y, vx=0.0, vy=330.0):
+        """Inicializa o projétil inimigo."""
+        self.x = float(x)
+        self.y = float(y)
+        self.vx = float(vx)
+        self.vy = float(vy)
+        self.rect = pygame.Rect(int(x - 5), int(y - 9), 10, 18)
+
+    def atualizar(self, dt):
+        """Move o projétil em direção à parte inferior da arena."""
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.rect.center = (int(self.x), int(self.y))
+
+    def desenhar(self, tela):
+        """Renderiza o disparo de plasma vermelho/amarelo."""
+        pygame.draw.ellipse(tela, COR_PERIGO_VERMELHO, self.rect)
+        interno = self.rect.inflate(-4, -6)
+        pygame.draw.ellipse(tela, COR_DESTAQUE_AMARELO, interno)
+
+
+class DroneInimigo:
+    """Drone de patrulha que cruza a arena e desvia a trajetória da bola."""
+
+    def __init__(self, x, y, velocidade):
+        """Inicializa o drone com movimento horizontal e oscilação vertical."""
+        self.x = float(x)
+        self.y_base = float(y)
+        self.y = float(y)
+        self.vx = float(velocidade)
+        self.rect = pygame.Rect(int(x - 24), int(y - 12), 48, 24)
+        self.tempo = random.uniform(0, 6.28)
+        self.cooldown_rebate = 0.0
+
+    def atualizar(self, dt):
+        """Movimenta o drone entre as paredes laterais da arena."""
+        self.tempo += dt
+        if self.cooldown_rebate > 0:
+            self.cooldown_rebate = max(0.0, self.cooldown_rebate - dt)
+
+        self.x += self.vx * dt
+        if self.x - 24 <= 18:
+            self.x = 42
+            self.vx = abs(self.vx)
+        elif self.x + 24 >= LARGURA_TELA - 18:
+            self.x = LARGURA_TELA - 42
+            self.vx = -abs(self.vx)
+
+        self.y = self.y_base + math.sin(self.tempo * 4.5) * 8.0
+        self.rect.center = (int(self.x), int(self.y))
+
+    def desenhar(self, tela):
+        """Desenha o drone cibernético com visor pulsante e escudo."""
+        pygame.draw.rect(tela, (45, 22, 75), self.rect, border_radius=10)
+        pygame.draw.rect(tela, COR_PERIGO_ROXO, self.rect, 2, border_radius=10)
+
+        olho_x = self.rect.centerx + int(math.sin(self.tempo * 6) * 8)
+        pygame.draw.circle(tela, COR_PERIGO_VERMELHO, (olho_x, self.rect.centery), 5)
+        pygame.draw.circle(tela, (255, 220, 220), (olho_x, self.rect.centery), 2)
+
+
+class ChefaoCore:
+    """Chefão final da Fase 4 que patrulha o topo e dispara rajadas de plasma."""
+
+    def __init__(self, vida_maxima):
+        """Configura posição, vida e cadência de ataques do chefão."""
+        self.vida_max = vida_maxima
+        self.vida = vida_maxima
+        self.x = float(LARGURA_TELA // 2)
+        self.y = 112.0
+        self.vx = 145.0
+        self.rect = pygame.Rect(int(self.x - 75), int(self.y - 24), 150, 48)
+        self.tempo = 0.0
+        self.timer_ataque = 2.2
+        self.carregando_tiro = 0.0
+        self.flash_dano = 0.0
+        self.invulneravel = 0.0
+
+    @property
+    def vivo(self):
+        """Retorna True enquanto o chefão possuir pontos de vida."""
+        return self.vida > 0
+
+    def atingir(self, dano=1):
+        """
+        Aplica dano ao chefão respeitando breve janela de invulnerabilidade.
+
+        Returns:
+            bool: True se o dano foi efetivamente contabilizado.
+        """
+        if self.invulneravel > 0 or not self.vivo:
+            return False
+        self.vida = max(0, self.vida - dano)
+        self.flash_dano = 0.14
+        self.invulneravel = 0.14
+        return True
+
+    def atualizar(self, dt, alvo_x):
+        """
+        Atualiza movimento, animação e dispara rajadas quando o timer zera.
+
+        Returns:
+            list[ProjetilInimigo]: Lista de novos projéteis disparados neste frame.
+        """
+        self.tempo += dt
+        if self.flash_dano > 0:
+            self.flash_dano = max(0.0, self.flash_dano - dt)
+        if self.invulneravel > 0:
+            self.invulneravel = max(0.0, self.invulneravel - dt)
+
+        fator_furia = 1.45 if self.vida <= self.vida_max // 2 else 1.0
+        self.x += self.vx * fator_furia * dt
+        if self.x - 75 <= 24:
+            self.x = 99
+            self.vx = abs(self.vx)
+        elif self.x + 75 >= LARGURA_TELA - 24:
+            self.x = LARGURA_TELA - 99
+            self.vx = -abs(self.vx)
+
+        self.rect.center = (int(self.x), int(self.y))
+
+        novos_tiros = []
+        self.timer_ataque -= dt * fator_furia
+        if self.timer_ataque <= 0.65:
+            self.carregando_tiro = max(0.0, self.timer_ataque)
+
+        if self.timer_ataque <= 0:
+            self.timer_ataque = 2.4
+            self.carregando_tiro = 0.0
+            dx = alvo_x - self.x
+            vx_mirado = max(-160.0, min(160.0, dx * 0.45))
+            novos_tiros.append(ProjetilInimigo(self.x - 36, self.rect.bottom, vx=0.0, vy=320.0))
+            novos_tiros.append(ProjetilInimigo(self.x + 36, self.rect.bottom, vx=0.0, vy=320.0))
+            if self.vida <= self.vida_max // 2:
+                novos_tiros.append(ProjetilInimigo(self.x, self.rect.bottom, vx=vx_mirado, vy=360.0))
+
+        return novos_tiros
+
+    def desenhar(self, tela):
+        """Renderiza a estrutura blindada e o núcleo energético do chefão."""
+        cor_casco = (255, 255, 255) if self.flash_dano > 0 else (38, 22, 65)
+        cor_borda = COR_DESTAQUE_AMARELO if self.carregando_tiro > 0 else COR_DESTAQUE_MAGENTA
+
+        pygame.draw.rect(tela, cor_casco, self.rect, border_radius=14)
+        pygame.draw.rect(tela, cor_borda, self.rect, 3, border_radius=14)
+
+        canhao_esq = pygame.Rect(self.rect.left + 28, self.rect.bottom - 4, 14, 10)
+        canhao_dir = pygame.Rect(self.rect.right - 42, self.rect.bottom - 4, 14, 10)
+        pygame.draw.rect(tela, COR_PERIGO_VERMELHO, canhao_esq, border_radius=3)
+        pygame.draw.rect(tela, COR_PERIGO_VERMELHO, canhao_dir, border_radius=3)
+
+        raio_nucleo = int(14 + 3 * math.sin(self.tempo * 8))
+        cor_nucleo = COR_DESTAQUE_AMARELO if self.carregando_tiro > 0 else COR_PERIGO_VERMELHO
+        pygame.draw.circle(tela, cor_nucleo, self.rect.center, raio_nucleo)
+        pygame.draw.circle(tela, (255, 255, 255), self.rect.center, max(4, raio_nucleo // 2))
