@@ -648,3 +648,171 @@ class JogoBreakout:
                 nova.tempo_fogo = base.tempo_fogo
                 nova.lancar(angulo)
                 self.bolas.append(nova)
+    def _desenhar_hud(self):
+        """Renderiza a barra superior com nome do jogador, pontuação, fase e vidas."""
+        pygame.draw.rect(self.tela, (16, 20, 42), (0, 0, LARGURA_TELA, 54))
+        pygame.draw.line(self.tela, COR_DESTAQUE_CIANO, (0, 54), (LARGURA_TELA, 54), 2)
+
+        nome_exibicao = self.nome_jogador[:13]
+        txt_jogador = self.fonte_hud.render(f"JOGADOR: {nome_exibicao}", True, COR_DESTAQUE_AMARELO)
+        txt_pontos = self.fonte_hud.render(f"PONTOS: {self.pontuacao:06d}", True, COR_TEXTO_PRINCIPAL)
+        txt_fase = self.fonte_hud.render(
+            f"FASE {self.fase_atual + 1}/{self.gerenciador_fases.total_fases}",
+            True,
+            COR_DESTAQUE_CIANO,
+        )
+
+        self.tela.blit(txt_jogador, (18, 17))
+        self.tela.blit(txt_pontos, (305, 17))
+        self.tela.blit(txt_fase, (515, 17))
+
+        for i in range(self.vidas):
+            cx = 650 + i * 22
+            pygame.draw.circle(self.tela, COR_DESTAQUE_MAGENTA, (cx, 27), 7)
+            pygame.draw.circle(self.tela, (255, 180, 215), (cx - 2, 25), 2)
+
+        status_som = "SOM:ON[M]" if self.audio.ativo else "SOM:OFF[M]"
+        cor_som = COR_DESTAQUE_VERDE if self.audio.ativo else COR_TEXTO_SECUNDARIO
+        txt_som = self.fonte_pequena.render(status_som, True, cor_som)
+        self.tela.blit(txt_som, (LARGURA_TELA - txt_som.get_width() - 16, 20))
+
+        if self.chefao and self.chefao.vivo:
+            largura_barra = 340
+            x_barra = LARGURA_TELA // 2 - largura_barra // 2
+            y_barra = 64
+            proporcao = self.chefao.vida / self.chefao.vida_max
+            pygame.draw.rect(self.tela, (30, 16, 44), (x_barra, y_barra, largura_barra, 12), border_radius=6)
+            pygame.draw.rect(
+                self.tela,
+                COR_PERIGO_VERMELHO,
+                (x_barra, y_barra, int(largura_barra * proporcao), 12),
+                border_radius=6,
+            )
+            pygame.draw.rect(self.tela, COR_DESTAQUE_AMARELO, (x_barra, y_barra, largura_barra, 12), 1, border_radius=6)
+
+        alertas = []
+        if self.raquete.tempo_invertida > 0:
+            alertas.append((f"CONTROLES INVERTIDOS ({self.raquete.tempo_invertida:.1f}s)", COR_PERIGO_ROXO))
+        if self.raquete.tempo_encolhida > 0:
+            alertas.append((f"RAQUETE ENCOLHIDA ({self.raquete.tempo_encolhida:.1f}s)", COR_PERIGO_VERMELHO))
+        if self.raquete.tempo_laser > 0:
+            alertas.append((f"LASER ATIVO ({self.raquete.tempo_laser:.1f}s)", COR_DESTAQUE_LARANJA))
+        if any(b.tempo_fogo > 0 for b in self.bolas):
+            alertas.append(("BOLA DE FOGO", COR_DESTAQUE_AMARELO))
+
+        if alertas:
+            texto_alerta, cor_alerta = alertas[0]
+            self._desenhar_texto_centralizado(self.fonte_pequena, texto_alerta, cor_alerta, ALTURA_TELA - 18)
+
+    def _desenhar_texto_centralizado(self, fonte, texto, cor, y):
+        """Auxiliar para centralizar linhas de texto horizontalmente."""
+        surf = fonte.render(texto, True, cor)
+        self.tela.blit(surf, surf.get_rect(center=(LARGURA_TELA // 2, y)))
+
+    def _desenhar_menu(self):
+        """Renderiza a tela inicial com dificuldade, comandos e pontuações."""
+        pulso = int(8 * math.sin(self.tempo_global * 4))
+        self._desenhar_texto_centralizado(
+            self.fonte_titulo, "NEON BREAKOUT", COR_DESTAQUE_CIANO, 105 + pulso // 2
+        )
+        self._desenhar_texto_centralizado(
+            self.fonte_subtitulo, "EDICAO FEIRA DE JOGOS // ATARI REIMAGINED", COR_DESTAQUE_MAGENTA, 152
+        )
+
+        self._desenhar_texto_centralizado(
+            self.fonte_texto, "SELECIONE A DIFICULDADE (SETAS < > ou 1 / 2 / 3):", COR_TEXTO_SECUNDARIO, 198
+        )
+        largura_btn = 160
+        espaco_btn = 24
+        total_w = 3 * largura_btn + 2 * espaco_btn
+        inicio_x = (LARGURA_TELA - total_w) // 2
+
+        for idx, chave in enumerate(ORDEM_DIFICULDADES):
+            info = DIFICULDADES[chave]
+            selecionado = idx == self.indice_dificuldade
+            rect_btn = pygame.Rect(inicio_x + idx * (largura_btn + espaco_btn), 218, largura_btn, 40)
+            cor_fundo_btn = (34, 42, 82) if selecionado else (16, 20, 42)
+            cor_borda_btn = info["cor"] if selecionado else (70, 80, 120)
+
+            pygame.draw.rect(self.tela, cor_fundo_btn, rect_btn, border_radius=10)
+            pygame.draw.rect(self.tela, cor_borda_btn, rect_btn, 3 if selecionado else 1, border_radius=10)
+            lbl = self.fonte_hud.render(info["rotulo"], True, info["cor"] if selecionado else COR_TEXTO_SECUNDARIO)
+            self.tela.blit(lbl, lbl.get_rect(center=rect_btn.center))
+
+        # Painel de comandos
+        painel = pygame.Rect(LARGURA_TELA // 2 - 295, 276, 590, 152)
+        pygame.draw.rect(self.tela, (18, 22, 48), painel, border_radius=12)
+        pygame.draw.rect(self.tela, COR_DESTAQUE_CIANO, painel, 2, border_radius=12)
+
+        self._desenhar_texto_centralizado(
+            self.fonte_subtitulo, "[ ENTER ] ou [ ESPACO ]  -  INICIAR PARTIDA", COR_DESTAQUE_VERDE, 306
+        )
+        self._desenhar_texto_centralizado(
+            self.fonte_subtitulo, "[ I ]  -  COMO JOGAR, ARMADILHAS E CHEFAO", COR_DESTAQUE_AMARELO, 348
+        )
+        self._desenhar_texto_centralizado(
+            self.fonte_texto, "[ F11 ] Tela Cheia   |   [ M ] Audio   |   [ ESC ] Sair", COR_TEXTO_SECUNDARIO, 394
+        )
+
+        # Painel de pontuações dos jogadores da sessão
+        painel_pontos = pygame.Rect(LARGURA_TELA // 2 - 295, 446, 590, 212)
+        pygame.draw.rect(self.tela, (18, 22, 48), painel_pontos, border_radius=12)
+        pygame.draw.rect(self.tela, COR_DESTAQUE_MAGENTA, painel_pontos, 2, border_radius=12)
+
+        self._desenhar_texto_centralizado(
+            self.fonte_hud, "PONTUACAO DOS JOGADORES", COR_DESTAQUE_AMARELO, 470
+        )
+        pygame.draw.line(
+            self.tela,
+            COR_DESTAQUE_MAGENTA,
+            (painel_pontos.left + 24, 490),
+            (painel_pontos.right - 24, 490),
+            1,
+        )
+
+        if not self.historico_partidas:
+            self._desenhar_texto_centralizado(
+                self.fonte_texto,
+                "Nenhuma partida registrada ainda — aperte ENTER para jogar!",
+                COR_TEXTO_SECUNDARIO,
+                565,
+            )
+        else:
+            y_linha = 510
+            for idx, item in enumerate(self.historico_partidas):
+                cor_linha = COR_DESTAQUE_VERDE if idx == 0 else COR_TEXTO_PRINCIPAL
+                texto_registro = (
+                    f"{item['nome']:<16}   {item['dificuldade']:<8}   {item['pontos']:06d} PTS"
+                )
+                self._desenhar_texto_centralizado(self.fonte_hud, texto_registro, cor_linha, y_linha)
+                y_linha += 34
+
+    def _desenhar_tela_nome(self):
+        """Renderiza a caixa de texto para o jogador digitar seu nome."""
+        self._desenhar_texto_centralizado(
+            self.fonte_titulo, "IDENTIFICACAO", COR_DESTAQUE_CIANO, 155
+        )
+
+        painel = pygame.Rect(LARGURA_TELA // 2 - 290, 225, 580, 270)
+        pygame.draw.rect(self.tela, (18, 22, 48), painel, border_radius=14)
+        pygame.draw.rect(self.tela, COR_DESTAQUE_MAGENTA, painel, 2, border_radius=14)
+
+        self._desenhar_texto_centralizado(
+            self.fonte_subtitulo, "DIGITE O NOME DO JOGADOR:", COR_TEXTO_PRINCIPAL, 272
+        )
+
+        caixa_texto = pygame.Rect(LARGURA_TELA // 2 - 210, 315, 420, 56)
+        pygame.draw.rect(self.tela, (10, 14, 30), caixa_texto, border_radius=10)
+        pygame.draw.rect(self.tela, COR_DESTAQUE_AMARELO, caixa_texto, 2, border_radius=10)
+
+        cursor = "_" if int(self.tempo_global * 3) % 2 == 0 else " "
+        texto_exibido = f"{self.nome_jogador}{cursor}"
+        surf_nome = self.fonte_subtitulo.render(texto_exibido, True, COR_DESTAQUE_AMARELO)
+        self.tela.blit(surf_nome, surf_nome.get_rect(center=caixa_texto.center))
+
+        self._desenhar_texto_centralizado(
+            self.fonte_subtitulo, "[ ENTER ] Confirmar e Jogar", COR_DESTAQUE_VERDE, 415
+        )
+        self._desenhar_texto_centralizado(
+            self.fonte_texto, "[ ESC ] Voltar ao Menu", COR_TEXTO_SECUNDARIO, 458
+        )
