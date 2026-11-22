@@ -816,3 +816,194 @@ class JogoBreakout:
         self._desenhar_texto_centralizado(
             self.fonte_texto, "[ ESC ] Voltar ao Menu", COR_TEXTO_SECUNDARIO, 458
         )
+    def _desenhar_instrucoes(self):
+        """Renderiza a tela informativa com controles, blocos, bônus e armadilhas."""
+        self._desenhar_texto_centralizado(
+            self.fonte_titulo, "GUIA DE SOBREVIVENCIA", COR_DESTAQUE_CIANO, 82
+        )
+
+        painel = pygame.Rect(75, 130, LARGURA_TELA - 150, 480)
+        pygame.draw.rect(self.tela, (18, 22, 48), painel, border_radius=12)
+        pygame.draw.rect(self.tela, COR_DESTAQUE_MAGENTA, painel, 2, border_radius=12)
+
+        linhas = [
+            ("CONTROLES:", COR_DESTAQUE_AMARELO),
+            ("  Setas / A-D / Mouse: Move raquete  |  Espaco/Clique: Lanca e atira", COR_TEXTO_PRINCIPAL),
+            ("  P / ESC: Pausar   |   F11: Tela Cheia/Janela   |   M: Mutar som", COR_TEXTO_PRINCIPAL),
+            ("", COR_TEXTO_PRINCIPAL),
+            ("OBSTACULOS E INIMIGOS:", COR_DESTAQUE_AMARELO),
+            ("  Prismas Cinza (X): Indestrutiveis  |  Laranja: Explode vizinhos", COR_TEXTO_PRINCIPAL),
+            ("  Drones Roxos: Desviam a bola (destrua com Laser ou Bola de Fogo)", COR_TEXTO_PRINCIPAL),
+            ("  Fase 4 (Chefao Core): Atira plasma que encolhe e paralisa a raquete", COR_TEXTO_PRINCIPAL),
+            ("", COR_TEXTO_PRINCIPAL),
+            ("CAPSULAS POSITIVAS (BORDAS ARREDONDADAS):", COR_DESTAQUE_VERDE),
+            ("  [EXP] Raquete maior   [3X] Multibola   [LSR] Lasers   [FGO] Fogo   [+1V] Vida", COR_DESTAQUE_CIANO),
+            ("", COR_TEXTO_PRINCIPAL),
+            ("ARMADILHAS PARA DESVIAR (CAPSULAS QUADRADAS):", COR_PERIGO_VERMELHO),
+            ("  [-LARG] Encolhe raquete   [FAST] Acelera bola   [INV] Inverte controles", COR_PERIGO_ROXO),
+        ]
+
+        y = 152
+        for texto, cor in linhas:
+            surf = self.fonte_texto.render(texto, True, cor)
+            self.tela.blit(surf, (105, y))
+            y += 30
+
+        self._desenhar_texto_centralizado(
+            self.fonte_subtitulo, "Pressione [ ENTER ] ou [ ESC ] para voltar", COR_DESTAQUE_VERDE, 645
+        )
+
+    def _desenhar_partida(self):
+        """Desenha todos os elementos ativos da arena durante o jogo."""
+        self._desenhar_hud()
+
+        for tijolo in self.tijolos:
+            tijolo.desenhar(self.tela)
+
+        if self.chefao and self.chefao.vivo:
+            self.chefao.desenhar(self.tela)
+
+        for drone in self.drones:
+            drone.desenhar(self.tela)
+
+        for cap in self.capsulas:
+            cap.desenhar(self.tela, self.fonte_pequena)
+
+        for laser in self.lasers:
+            laser.desenhar(self.tela)
+
+        for tiro in self.tiros_inimigos:
+            tiro.desenhar(self.tela)
+
+        self.raquete.desenhar(self.tela)
+
+        for bola in self.bolas:
+            bola.desenhar(self.tela)
+
+        for onda in self.ondas_choque:
+            onda.desenhar(self.tela)
+
+        for p in self.particulas:
+            p.desenhar(self.tela)
+
+        for txt in self.textos_flutuantes:
+            txt.desenhar(self.tela, self.fonte_pequena)
+
+        if any(b.presa for b in self.bolas):
+            info = self.gerenciador_fases.obter_info_fase(self.fase_atual)
+            self._desenhar_texto_centralizado(
+                self.fonte_subtitulo, info["nome"], COR_DESTAQUE_AMARELO, 455
+            )
+            self._desenhar_texto_centralizado(
+                self.fonte_texto, info["subtitulo"], COR_TEXTO_SECUNDARIO, 488
+            )
+            self._desenhar_texto_centralizado(
+                self.fonte_texto,
+                "Pressione ESPACO ou CLIQUE para lancar a bola",
+                COR_TEXTO_PRINCIPAL,
+                525,
+            )
+
+    def _desenhar_overlay_central(self, titulo, subtitulo, instrucao, cor_titulo, subtitulo_extra=None):
+        """Desenha um painel semitransparente para Pausa, Transição ou Fim."""
+        overlay = pygame.Surface((LARGURA_TELA, ALTURA_TELA), pygame.SRCALPHA)
+        overlay.fill((8, 10, 22, 185))
+        self.tela.blit(overlay, (0, 0))
+
+        altura_caixa = 305 if subtitulo_extra else 270
+        caixa = pygame.Rect(
+            LARGURA_TELA // 2 - 345,
+            ALTURA_TELA // 2 - altura_caixa // 2,
+            690,
+            altura_caixa,
+        )
+        pygame.draw.rect(self.tela, (20, 24, 52), caixa, border_radius=14)
+        pygame.draw.rect(self.tela, cor_titulo, caixa, 3, border_radius=14)
+
+        if subtitulo_extra:
+            self._desenhar_texto_centralizado(
+                self.fonte_titulo, titulo, cor_titulo, ALTURA_TELA // 2 - 90
+            )
+            self._desenhar_texto_centralizado(
+                self.fonte_subtitulo, subtitulo, COR_DESTAQUE_CIANO, ALTURA_TELA // 2 - 22
+            )
+            self._desenhar_texto_centralizado(
+                self.fonte_subtitulo, subtitulo_extra, COR_DESTAQUE_AMARELO, ALTURA_TELA // 2 + 22
+            )
+            self._desenhar_texto_centralizado(
+                self.fonte_texto, instrucao, COR_TEXTO_PRINCIPAL, ALTURA_TELA // 2 + 95
+            )
+        else:
+            self._desenhar_texto_centralizado(
+                self.fonte_titulo, titulo, cor_titulo, ALTURA_TELA // 2 - 70
+            )
+            self._desenhar_texto_centralizado(
+                self.fonte_subtitulo, subtitulo, COR_TEXTO_PRINCIPAL, ALTURA_TELA // 2
+            )
+            self._desenhar_texto_centralizado(
+                self.fonte_texto, instrucao, COR_DESTAQUE_AMARELO, ALTURA_TELA // 2 + 72
+            )
+
+    def executar(self):
+        """Executa o loop principal da aplicação a 60 quadros por segundo."""
+        rodando = True
+        while rodando:
+            dt = min(self.relogio.tick(FPS) / 1000.0, 0.05)
+            self.tempo_global += dt
+            if self.tremor_tela > 0:
+                self.tremor_tela = max(0.0, self.tremor_tela - dt)
+
+            rodando = self._processar_eventos()
+            self.fundo.atualizar(dt)
+
+            if self.estado == "JOGANDO":
+                self._atualizar_jogando(dt)
+
+            self.tela.fill(COR_FUNDO)
+            self.fundo.desenhar(self.tela)
+
+            if self.estado == "MENU":
+                self._desenhar_menu()
+            elif self.estado == "NOME_JOGADOR":
+                self._desenhar_tela_nome()
+            elif self.estado == "INSTRUCOES":
+                self._desenhar_instrucoes()
+            elif self.estado == "JOGANDO":
+                self._desenhar_partida()
+            elif self.estado == "PAUSADO":
+                self._desenhar_partida()
+                self._desenhar_overlay_central(
+                    "JOGO PAUSADO",
+                    f"{self.nome_jogador}  |  Pontuacao: {self.pontuacao:06d}",
+                    "[ P / ENTER ] Continuar   |   [ Q ] Menu Inicial",
+                    COR_DESTAQUE_CIANO,
+                )
+            elif self.estado == "TRANSICAO_FASE":
+                self._desenhar_partida()
+                self._desenhar_overlay_central(
+                    "FASE CONCLUIDA!",
+                    f"{self.nome_jogador}  |  Pontos: {self.pontuacao:06d}",
+                    "Pressione [ ENTER ] ou [ ESPACO ] para a proxima fase",
+                    COR_DESTAQUE_VERDE,
+                )
+            elif self.estado == "FIM_DE_JOGO":
+                titulo = "VITORIA TOTAL!" if self.vitoria_final else "FIM DE JOGO"
+                cor = COR_DESTAQUE_VERDE if self.vitoria_final else COR_DESTAQUE_MAGENTA
+                self._desenhar_overlay_central(
+                    titulo,
+                    f"JOGADOR: {self.nome_jogador}",
+                    "[ ENTER ] Jogar Novamente  |  [ N ] Novo Jogador  |  [ ESC ] Menu",
+                    cor,
+                    subtitulo_extra=f"PONTUACAO FINAL: {self.pontuacao:06d} PTS",
+                )
+
+            if self.tremor_tela > 0:
+                desloc_x = random.randint(-5, 5)
+                desloc_y = random.randint(-5, 5)
+                copia = self.tela.copy()
+                self.tela.fill(COR_FUNDO)
+                self.tela.blit(copia, (desloc_x, desloc_y))
+
+            pygame.display.flip()
+
+        pygame.quit()
